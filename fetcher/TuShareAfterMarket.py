@@ -1,6 +1,7 @@
 import os
 import errno
 import json
+import shutil
 from datetime import datetime
 from time import time, sleep
 
@@ -13,15 +14,19 @@ setting = json.load(config)
 SYMBOLS = setting['SYMBOLS']
 
 #----------------------------------------------------------------------
-def downloadTodayData(dataFolder):
+def downloadTodayData():
     """download all the txn happened today of SYMBOLS"""
 
+    cwd = os.getcwd()
     stampStart = time()
 
     # step 1. folder of today
+    shutil.rmtree('tmp', ignore_errors=True) 
+    mkdir_p('tmp')
+    os.chdir('tmp')
     day_asof = datetime.today().strftime('%Y%m%d')
-    path = dataFolder + "/ts" + day_asof
-    mkdir_p(path)
+    path = "ts" + day_asof
+    mkdir_p('./' + path)
 
     # step 1.1 index data
     for i in range(1,16):
@@ -50,13 +55,14 @@ def downloadTodayData(dataFolder):
     mkdir_p(path + "/sina")
 
     # step 4. compress the tar ball
-    tar = tarfile.open('ts' + day_asof + '.tar.bz2', 'w:bz2')
+    tar = tarfile.open(cwd +'/ts' + day_asof + '.tar.bz2', 'w:bz2')
     tar.add(path)
     tar.close()
 
     elapsed = (time() - stampStart) * 1000
 
     print("took %dmsec to download today's data" % elapsed)
+    os.chdir(cwd)
 
 
 #----------------------------------------------------------------------
@@ -80,4 +86,4 @@ def mkdir_p(path):
         else:
             raise
 
-downloadTodayData('../data')
+downloadTodayData()
