@@ -1,5 +1,5 @@
 #!/bin/bash
-
-cd /home/root/wkspaces/penny/fetcher
-python ./TuShareAfterMarket.py
+DIR=$(dirname `readlink -f $0`)
+cd $DIR
+python ./TuShareAfterMarket.py 2>&1 > TuShareAfterMarket.log
 
