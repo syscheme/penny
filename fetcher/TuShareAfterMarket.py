@@ -48,8 +48,14 @@ def downloadTodayData():
 
     # step 2. create the folder of the date
     mkdir_p(path + "/txn")
-    for symbol in SYMBOLS:
-        downloadTxnsBySymbol(symbol, folder=path +"/txn")
+    symbolsToDownload =SYMBOLS
+    while len(symbolsToDownload) >0:
+        symbolsToRetry =[]
+        for symbol in symbolsToDownload:
+            if not downloadTxnsBySymbol(symbol, folder=path +"/txn"):
+                symbolsToRetry.append(symbol)
+        symbolsToDownload = symbolsToRetry
+
 
     # step 3. create the folder of the date
     mkdir_p(path + "/sina")
@@ -68,14 +74,18 @@ def downloadTodayData():
 #----------------------------------------------------------------------
 def downloadTxnsBySymbol(symbol, folder):
     """download all the txn happened today"""
-    for i in range(1,16):
-        try:
-            df = ts.get_today_ticks(symbol)
-            df.to_csv(folder + "/" + symbol+'.csv', header=True, index=False, encoding='utf-8')
-            break
-        except IOError as exc:  # Python >2.5
-            sleep(30*i)
-            pass
+    try:
+        print "\ndownloading %s" % symbol
+        df = ts.get_today_ticks(symbol)
+        df.to_csv(folder + "/" + symbol+'.csv', header=True, index=False, encoding='utf-8')
+        return True
+    except IOError as exc:  # Python >2.5
+        print "\nfailed to download %s" % symbol
+        sleep(10)
+        pass
+
+    return False
+
 
 def mkdir_p(path):
     try:
