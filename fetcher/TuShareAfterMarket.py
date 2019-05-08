@@ -3,7 +3,7 @@ import errno
 import json
 import shutil
 from datetime import datetime
-from time import time, sleep
+import time
 import tushare as ts
 import tarfile
 
@@ -11,14 +11,17 @@ config = open('config.json')
 setting = json.load(config)
 
 SYMBOLS = setting['SYMBOLS']
-YIELDSEC =10
+YIELDSEC =5
+MAX_ROUNDS=20
 #----------------------------------------------------------------------
 def downloadTodayData():
     """download all the txn happened today of SYMBOLS"""
 
     cwd = os.getcwd()
-    stampStart = time()
+    stampStart = time.time()
     day_asof = datetime.today().strftime('%Y%m%d')
+    endOfDay = datetime.strptime(day_asof +' 23:50:00', '%Y%m%d %H:%M:%S')
+    stampToStop = time.mktime(endOfDay.timetuple())
 
     mkdir_p('tmp')
     os.chdir('tmp')
@@ -38,13 +41,13 @@ def downloadTodayData():
     mkdir_p(os.getcwd() + '/' + path)
 
     # step 1.1 index data
-    print "\ndownloading index_ov.csv"
-    for i in range(1,16):
+    print "\n" + day_asof +": downloading index_ov.csv"
+    for i in range(1,MAX_ROUNDS):
         try:
             ts.get_index().to_csv(path+"/index_ov.csv", header=True, index=False, encoding='utf-8')
             break
         except IOError as exc:  # Python >2.5
-            sleep(YIELDSEC*i)
+            time.sleep(YIELDSEC*i)
             pass
 
     # step 1.2 all ticks' day overview
@@ -55,23 +58,31 @@ def downloadTodayData():
         pass
 
     if fsize < 100 :
-        print "\ndownloading all.csv"
-        for i in range(1,16):
+        print "\n" + day_asof +": downloading all.csv"
+        for i in range(1,MAX_ROUNDS*2):
             try:
                 ts.get_today_all().to_csv(path+"/all.csv", header=True, index=False, encoding='utf-8')
                 break
             except IOError as exc:  # Python >2.5
-                sleep(YIELDSEC*i)
+                time.sleep(YIELDSEC*i)
                 pass
 
     # step 2. create the folder of the date
-    roundNo=0
     mkdir_p(path + "/txn")
     symbolsToDownload =SYMBOLS
-    while len(symbolsToDownload) >0:
-        roundNo = roundNo+1
+
+    for roundNo in range(1, MAX_ROUNDS) :
+        if len(symbolsToDownload) <=0:
+            break
+
+        stampRoundStart = time.time()
+        if stampRoundStart> stampToStop :
+            break;
+
         symbolsToRetry =[]
-	print "\nround[%d] %d symbols to download\n" % (roundNo, len(symbolsToDownload))
+        succeeded=[]
+        stampRoundStart = time.time()
+	print "\n" + day_asof +": round[%d] %d symbols to download" % (roundNo, len(symbolsToDownload))
         for symbol in symbolsToDownload:
             try :
                 fsize =0
@@ -82,13 +93,15 @@ def downloadTodayData():
             if fsize > 1000 :
                 continue
 
-            print "\nround[%d] downloading %s" % (roundNo, symbol)
-            if not downloadTxnsBySymbol(symbol, folder=path +"/txn"):
-                print "\nround[%d] failed to download %s" % (roundNo, symbol)
+            print "\n" + day_asof +": round[%d] downloading %s" % (roundNo, symbol)
+            if downloadTxnsBySymbol(symbol, folder=path +"/txn"):
+                succeeded.append(symbol)
+            else:
+                print "\n" + day_asof +": round[%d] failed to download %s, enque to retry" % (roundNo, symbol)
                 symbolsToRetry.append(symbol)
 
         symbolsToDownload = symbolsToRetry
-
+        print "\n" + day_asof +": round[%d] downloaded %s, took %dsec, %d symbols to retry" % (roundNo, succeeded, (time.time() - stampRoundStart), len(symbolsToDownload))
 
     # step 3. create the folder of the date
     mkdir_p(path + "/sina")
@@ -98,10 +111,7 @@ def downloadTodayData():
     tar.add(path)
     tar.close()
     shutil.rmtree(path, ignore_errors=True)
-
-    elapsed = (time() - stampStart) * 1000
-
-    print("took %dmsec to download today's data" % elapsed)
+    print "\n" + day_asof +": done, took %dsec to download today's data" % (time.time() - stampStart)
     os.chdir(cwd)
 
 
@@ -113,7 +123,7 @@ def downloadTxnsBySymbol(symbol, folder):
         df.to_csv(folder + "/" + symbol+'.csv', header=True, index=False, encoding='utf-8')
         return True
     except IOError as exc:  # Python >2.5
-        sleep(YIELDSEC)
+        time.sleep(YIELDSEC)
         pass
 
     return False
